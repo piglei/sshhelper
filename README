@@ -4,3 +4,10 @@ sshhelper
 
 shhhelper is a simple script which helps 
 you ssh into your machines conveniently.
+
+you should have **pexpect** to make this script
+work.
+    
+    $ easy_install pexpect
+
+    or go to http://www.noah.org/wiki/pexpect
