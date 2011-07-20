@@ -190,9 +190,9 @@ class SSHhandler(object):
             code = subprocess.call("ping %s -c 1 -W 3" % self.host, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
             code = subprocess.call("nc -z %s %s -w 3" % (self.host, self.port), shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         """
-        socket.setdefaulttimeout(3)
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3)
             sock.connect((self.host, self.port))
             sock.close()
         except:
