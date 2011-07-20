@@ -12,6 +12,7 @@ import struct
 import fcntl
 import termios
 import signal
+import socket
 import pexpect
 import subprocess
 from configobj import ConfigObj
@@ -140,7 +141,8 @@ class SSHhandler(object):
             self.ssh_newkey,
             '(?i)password: ',
             self.dot, 
-            "(?i)Connection refused"
+            "(?i)Connection refused",
+            pexpect.EOF
         ])
         # timeout
         if i == 0:
@@ -148,6 +150,8 @@ class SSHhandler(object):
         if i == 3:
             return
         if i == 4:
+            self._connection_failed(REFUSED)
+        if i == 5:
             self._connection_failed(REFUSED)
         # accept the public key
         if i == 1:
@@ -179,9 +183,21 @@ class SSHhandler(object):
     def _need_jump(self):
         """
         use `ping` to check if the host is available now
+
+        change ping and nc to python's socket
+
+        old:
+            code = subprocess.call("ping %s -c 1 -W 3" % self.host, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+            code = subprocess.call("nc -z %s %s -w 3" % (self.host, self.port), shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         """
-        code = subprocess.call("ping %s -c 1 -W 3" % self.host, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        return bool(code)
+        socket.setdefaulttimeout(3)
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.host, self.port))
+            sock.close()
+        except:
+            return True
+        return False
 
     def _connection_failed(self, exit_code=TIMEOUT):
         print "Could not ssh into %s" % self.host
