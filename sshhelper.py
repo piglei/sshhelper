@@ -14,43 +14,8 @@ import termios
 import signal
 import pexpect
 import subprocess
+from configobj import ConfigObj
 
-# when a host is not available directly, if you've
-# configured a JUMP_HOST, the script will ssh into the
-# JUMP_HOST and ssh to the host.
-#JUMP_HOST = ("127.0.0.1", "username", "password")
-
-# enable this line if you have no jump host
-JUMP_HOST = None
-
-# IP: username, password, port, commands
-#
-#   - *port* is not required and it's default to 22
-#   - *commands* is a list of cmds you want to execute when
-#     logged into the host. use a basestring if it is a 
-#     regular command. and a 2-items list/tuple if it need
-#     to expect for the first item and then send the second
-#     item
-#   
-# examples:
-#       {"192.168.1.1": {
-#            "username": "jim",     *required*
-#            "password": "pw123",   *required*
-#            "ssh_arg": "",
-#            "port": 22,
-#            "commands": [
-#                "su",
-#                ["Password: ", "test123"]
-#            ],
-#        }}
-KNOWN_HOSTS = {
-    # "127.0.0.1": {"username": "username", "password": "password"},
-    # "127.0.0.1": {"username": "username", "password": "password", "commands": [
-    #    "sudo su",
-    #    ("Password: ", "zhulei123"),
-    #    "su - caifeng"
-    #]},
-}
 # EXIT_CODES
 TIMEOUT = 1
 CANNOT_CONNECT = 2
@@ -58,18 +23,75 @@ REFUSED = 3
 ARGS_ERROR = 99
 NOT_EXIST = 100
 
+def int_get(raw, default=None):
+    try:
+        return int(raw)
+    except:
+        return default
+
+# This is the default config path
+config_path = os.path.join(os.environ["HOME"], ".sshhelper_config")
+CONFIG_TMPL = '''[jump_host]
+# jump host is used when the machine you want to ssh into is 
+# not available
+#
+# host = 127.0.0.1
+# username = "username"
+# password = "password"
+# port = 22
+
+[hosts]
+# add your hosts here.
+# 
+# - username is the username your want to use
+# - password is the password your want to use
+# - summary
+# - port is the ssh port, default to 22
+# - ssh_args is the extra args , default to an empty string
+# - commands is a list of cmds you want to execute when
+#   logged into the host. use a basestring if it is a 
+#   regular command. and a 2-items list/tuple if it need
+#   to expect for the first item and then send the second
+#
+# [[127.0.0.1]]
+# username = "username"
+# password = "password"
+# summary = "my laptop"
+# port = 22
+# ssh_args = "-i your.pem"
+# commands = cd /data, ls
+'''
+
+def load_config(config_path):
+    """Load config from config file"""
+    global KNOWN_HOSTS, JUMP_HOST
+    if not os.path.exists(config_path):
+        open(config_path, 'w').write(CONFIG_TMPL)
+    config = ConfigObj(infile=config_path)
+    KNOWN_HOSTS = config.get("hosts", {})
+    JUMP_HOST = config.get("jump_host")
+
+load_config(config_path)
+
+def get_hosts_list():
+    ret = []
+    for k in sorted(KNOWN_HOSTS.keys()):
+        ret.append( "        %-20s # %s" % (k, KNOWN_HOSTS[k].get("summary", "")))
+    return "\n".join(ret)
+
 USAGE = '''
 usage:
 
-    %s (IP or short name)
+    %s (hostname or short name)
     
-    you can type a full ip like 192.168.11.3 or a short name like 
+    you can type a full hostname like 192.168.11.3 or a short name like 
     11.3 to ssh into it.
+    
+    - modify %s to add your hosts.
+    - available hosts:
 
-    available ips:
-
-        %s
-''' % (sys.argv[0], ("\n" + " "*8).join(sorted(KNOWN_HOSTS.keys())))
+%s
+''' % (sys.argv[0], config_path, get_hosts_list() if KNOWN_HOSTS else "no available hosts")
 
 class SSHhandler(object):
 
@@ -93,8 +115,8 @@ class SSHhandler(object):
             if self.is_jump or not JUMP_HOST:
                 sys.exit(CANNOT_CONNECT)
             
-            print "Using the jump server %s." % JUMP_HOST[0]
-            jump = SSHhandler(is_jump=True, *JUMP_HOST)
+            print "Using the jump server %s." % JUMP_HOST["host"]
+            jump = SSHhandler(is_jump=True, **JUMP_HOST)
             jump.login()
             self.child = jump.child
        
@@ -205,7 +227,7 @@ if __name__ == "__main__":
         host,
         values["username"],
         values.get("password", ""),
-        port = values.get("port"),
+        port = int_get(values.get("port"), 22),
         ssh_args = values.get("ssh_args", "")
     )
 
@@ -217,6 +239,9 @@ if __name__ == "__main__":
 
     commands = values.get("commands", [])
     for cmd in commands:
+        # if cmd contains a ",", split it into a list
+        if "," in cmd:
+            cmd = cmd.split(",")
         ssh.execute(cmd)
 
     ssh.interact()
