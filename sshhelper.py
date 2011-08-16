@@ -213,12 +213,8 @@ class SSHhandler(object):
 def ip_autocomplete(ip):
     """autocomplete for a ip address"""
     ips = []
-    for _ip in KNOWN_HOSTS.keys():
-        if _ip == ip:
-            return [_ip]
-        if ip in _ip:
-            ips.append(_ip)
-    return ips
+    ips2 = [_ip for _ip in KNOWN_HOSTS.keys() if ip in _ip and not ips.append(_ip) and _ip == ip]
+    return ips2 or ips
 
 if __name__ == "__main__":
     if not len(sys.argv) == 2:
