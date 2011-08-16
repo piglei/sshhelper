@@ -14,7 +14,6 @@ import termios
 import signal
 import socket
 import pexpect
-import subprocess
 from configobj import ConfigObj
 
 # EXIT_CODES
