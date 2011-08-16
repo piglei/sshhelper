@@ -258,5 +258,7 @@ if __name__ == "__main__":
         if "," in cmd:
             cmd = cmd.split(",")
         ssh.execute(cmd)
-
-    ssh.interact()
+    try:
+        ssh.interact()
+    except OSError, e:
+        pass
