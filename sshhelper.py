@@ -103,7 +103,7 @@ class SSHhandler(object):
         self.host = host
         self.username = username
         self.password = password
-        self.port = port or self.port_default
+        self.port = int_get(port, self.port_default)
         assert self.port > 0 and self.port < 65536, "port number must between 0 and 65535"
         self.is_jump = is_jump
         self.ssh_args = ssh_args
@@ -213,7 +213,7 @@ class SSHhandler(object):
 def ip_autocomplete(ip):
     """autocomplete for a ip address"""
     ips = []
-    ips2 = [_ip for _ip in KNOWN_HOSTS.keys() if ip in _ip and not ips.append(_ip) and _ip == ip]
+    ips2 = [_ip for _ip in KNOWN_HOSTS.keys() if ip in _ip and not ips.append(_ip) and (_ip == ip or _ip.endswith(ip))]
     return ips2 or ips
 
 if __name__ == "__main__":
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         host,
         values["username"],
         values.get("password", ""),
-        port = int_get(values.get("port"), 22),
+        port = values.get("port"),
         ssh_args = values.get("ssh_args", "")
     )
 
