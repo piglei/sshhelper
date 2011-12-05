@@ -14,6 +14,7 @@ import termios
 import signal
 import socket
 import pexpect
+from collections import defaultdict
 from configobj import ConfigObj
 
 # EXIT_CODES
@@ -206,9 +207,15 @@ class SSHhandler(object):
 
 def ip_autocomplete(ip):
     """autocomplete for a ip address"""
-    ips = []
-    ips2 = [_ip for _ip in KNOWN_HOSTS.keys() if ip in _ip and not ips.append(_ip) and (_ip == ip or _ip.endswith(ip))]
-    return ips2 or ips
+    result = defaultdict(list)
+    for _ip in KNOWN_HOSTS:
+        if ip == _ip:
+            result[3].append(_ip)
+        elif _ip.startswith(ip) or _ip.startswith(ip):
+            result[2].append(_ip)
+        elif ip in _ip:
+            result[1].append(_ip)
+    return result[3] or result[2] or result[1] or []
 
 if __name__ == "__main__":
     if not len(sys.argv) == 2:
