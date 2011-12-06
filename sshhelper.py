@@ -211,7 +211,7 @@ def ip_autocomplete(ip):
     for _ip in KNOWN_HOSTS:
         if ip == _ip:
             result[3].append(_ip)
-        elif _ip.startswith(ip) or _ip.startswith(ip):
+        elif _ip.startswith(ip) or _ip.endswith(ip):
             result[2].append(_ip)
         elif ip in _ip:
             result[1].append(_ip)
