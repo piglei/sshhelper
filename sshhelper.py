@@ -2,9 +2,15 @@
 # coding: utf-8
 """
 sshhelper
-Author: piglei2007@gmail.com
-Version: 1.0
+~~~~~~~~~
+
+A simple tool make life better when you have a lot of hosts.
+
+:Author: piglei2007@gmail.com
 """
+
+VERSION = [1, 0, 1]
+
 import re
 import os
 import sys
@@ -30,10 +36,8 @@ def int_get(raw, default=None):
     except:
         return default
 
-# This is the default config path
-config_path = os.path.join(os.environ["HOME"], ".sshhelper_config")
 CONFIG_TMPL = '''[jump_host]
-# jump host is used when the machine you want to ssh into is 
+# Jump host is used when the machine you want to ssh into is 
 # not available
 #
 # host = 127.0.0.1
@@ -42,14 +46,18 @@ CONFIG_TMPL = '''[jump_host]
 # port = 22
 
 [hosts]
-# add your hosts here.
+# Add your hosts here.
 # 
-# - username is the username your want to use
-# - password is the password your want to use
+# Available arguments
+# ~~~~~~~~~~~~~~~~~~~
+# 
+# - username
+# - password
 # - summary
-# - port is the ssh port, default to 22
-# - ssh_args is the extra args , default to an empty string
-# - commands is a list of cmds you want to execute when
+# - `short_name`, short name, you can use this name to log in.
+# - `port`, default to 22
+# - `ssh_args`, extra args , default to an empty string
+# - `commands`, a list of cmds you want to execute when
 #   logged into the host. use a basestring if it is a 
 #   regular command. and a 2-items list/tuple if it need
 #   to expect for the first item and then send the second
@@ -57,50 +65,73 @@ CONFIG_TMPL = '''[jump_host]
 # [[127.0.0.1]]
 # username = "username"
 # password = "password"
+# short_name = "laptop"
 # summary = "my laptop"
 # port = 22
 # ssh_args = "-i your.pem"
 # commands = cd /data, ls
 '''
 
-def load_config(config_path):
-    """Load config from config file"""
-    global KNOWN_HOSTS, JUMP_HOST
-    if not os.path.exists(config_path):
-        open(config_path, 'w').write(CONFIG_TMPL)
-    config = ConfigObj(infile=config_path)
-    KNOWN_HOSTS = config.get("hosts", {})
-    JUMP_HOST = config.get("jump_host")
+class ConfigLoader(object):
+    """
+    Loder for config file
+    """
+    def __init__(self, config_path):
+        self.config_path = config_path
+        self.hosts = []
+        self.jump_host = None
+    
+    def load(self):
+        """Load config from config file"""
+        if not os.path.exists(config_path):
+            open(config_path, 'w').write(CONFIG_TMPL)
+        config = ConfigObj(infile=config_path)
+        self.hosts = config.get("hosts", {})
+        self.jump_host = config.get("jump_host")
 
-load_config(config_path)
-
-def get_hosts_list():
+def get_usage(hosts=[]):
+    """
+    Return Usage string
+    ~~~~~~~~~~~~~~~~~~~
+    """
     ret = []
-    for k in sorted(KNOWN_HOSTS.keys()):
-        ret.append( "        %-20s # %s" % (k, KNOWN_HOSTS[k].get("summary", "")))
-    return "\n".join(ret)
+    for k in sorted(hosts.keys()):
+        short_name = hosts[k].get('short_name')
+        ret.append( "        %-20s # %s%s" % (
+            k, 
+            '[SN: %s] ' % short_name if short_name else '',
+            hosts[k].get("summary", "")
+        ))
+    hosts_str = "\n".join(ret)
 
-USAGE = '''
-usage:
+    usage = '''
+Usage:
 
     %s (hostname or short name)
     
-    you can type a full hostname like 192.168.11.3 or a short name like 
-    11.3 to ssh into it.
+    You can type a full ip address like 192.168.11.3 or a part of it
+    such as `11.3` to ssh into it.
+
+    If short_name is configured, you can use that name too.
     
     - modify %s to add your hosts.
     - available hosts:
 
 %s
-''' % (sys.argv[0], config_path, get_hosts_list() if KNOWN_HOSTS else "no available hosts")
+    ''' % (sys.argv[0], config_path, hosts_str if hosts else "no available hosts")
+    return usage
 
 class SSHhandler(object):
-
+    """
+    The Main SSHhandler
+    ~~~~~~~~~~~~~~~~~~~
+    """
+    jump_host = None 
     ssh_newkey = 'Are you sure you want to continue connecting'      
     port_default = 22
     dot = re.compile(r'[#$] ')
 
-    def __init__(self, host, username, password, port=22, ssh_args="", is_jump=False):
+    def __init__(self, host, username, password, port=22, ssh_args="", is_jump=False, short_name=''):
         self.host = host
         self.username = username
         self.password = password
@@ -108,16 +139,17 @@ class SSHhandler(object):
         assert self.port > 0 and self.port < 65536, "port number must between 0 and 65535"
         self.is_jump = is_jump
         self.ssh_args = ssh_args
+        self.visible_name = '%s[SN: %s]' % (host, short_name) if short_name else host
 
     def login(self):
-        print "Start login into %s, please wait..." % self.host
+        print "Start login into %s, please wait..." % self.visible_name
         if self._need_jump():
             print "%s is not availble directly." % self.host
-            if self.is_jump or not JUMP_HOST:
+            if self.is_jump or not self.jump_host:
                 sys.exit(CANNOT_CONNECT)
             
-            print "Using the jump server %s." % JUMP_HOST["host"]
-            jump = SSHhandler(is_jump=True, **JUMP_HOST)
+            print "Using the jump server %s." % self.jump_host["host"]
+            jump = SSHhandler(is_jump=True, **self.jump_host)
             jump.login()
             self.child = jump.child
        
@@ -205,27 +237,41 @@ class SSHhandler(object):
         self.child.setwinsize(a[0],a[1])
 
 
-def ip_autocomplete(ip):
-    """autocomplete for a ip address"""
+def autocomplete(key, hosts=[]):
+    """
+    Autocomplete for an input.
+    """
     result = defaultdict(list)
-    for _ip in KNOWN_HOSTS:
-        if ip == _ip:
-            result[3].append(_ip)
-        elif _ip.startswith(ip) or _ip.endswith(ip):
-            result[2].append(_ip)
-        elif ip in _ip:
-            result[1].append(_ip)
+    for ip in sorted(hosts.keys()):
+        host = hosts[ip]
+        short_name = host.get('short_name')
+        for match in (ip, short_name):
+            if not match:
+                continue
+            if key == match:
+                result[3].append(ip)
+            elif match.startswith(key) or match.endswith(key):
+                result[2].append(ip)
+            elif key in match:
+                result[1].append(ip)
     return result[3] or result[2] or result[1] or []
 
 if __name__ == "__main__":
+    # This is the default config path
+    config_path = os.path.join(os.environ["HOME"], ".sshhelper_config")
+    config = ConfigLoader(config_path)
+    config.load()
+
+    usage = get_usage(hosts=config.hosts)
+
     if not len(sys.argv) == 2:
-        print USAGE
+        print usage
         sys.exit(ARGS_ERROR)
     
-    hosts = ip_autocomplete( sys.argv[1] )
+    hosts = autocomplete(sys.argv[1], config.hosts)
     if not hosts:
         print "%s is not a valid ip address." % sys.argv[1]
-        print USAGE
+        print usage
         sys.exit(NOT_EXIST)
 
     if len(hosts) != 1:
@@ -233,14 +279,17 @@ if __name__ == "__main__":
         sys.exit(ARGS_ERROR)
 
     host = hosts[0]
-    values = KNOWN_HOSTS.get(host)
+    values = config.hosts.get(host)
+    # Set jump host
+    SSHhandler.jump_host = config.jump_host
 
     ssh = SSHhandler(
         host,
         values["username"],
         values.get("password", ""),
         port = values.get("port"),
-        ssh_args = values.get("ssh_args", "")
+        ssh_args=values.get("ssh_args", ""),
+        short_name=values.get('short_name', '')
     )
 
     try:
