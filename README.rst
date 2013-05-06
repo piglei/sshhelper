@@ -9,7 +9,7 @@ This script keeps a config file in ~/.sshhelper_config,
 you can add your hosts there
 
 You should have **pexpect** and **configobj** to make this script
-work.
+work. ::
     
     $ pip install pexpect configobj
     # or 
