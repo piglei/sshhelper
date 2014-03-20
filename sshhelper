@@ -23,6 +23,8 @@ import pexpect
 from collections import defaultdict
 from configobj import ConfigObj
 
+TIME_WAIT = 60
+
 # EXIT_CODES
 TIMEOUT = 1
 CANNOT_CONNECT = 2
@@ -38,7 +40,8 @@ def int_get(raw, default=None):
 
 CONFIG_TMPL = '''[jump_host]
 # Jump host is used when the machine you want to ssh into is 
-# not available
+# not available, it's useful for server which doesn't have a public
+# IP address.
 #
 # host = 127.0.0.1
 # username = "username"
@@ -54,13 +57,14 @@ CONFIG_TMPL = '''[jump_host]
 # - username
 # - password
 # - summary
-# - `short_name`, short name, you can use this name to log in.
+# - `short_name`, short name, you can use this name to log in instead of IP address.
 # - `port`, default to 22
 # - `ssh_args`, extra args , default to an empty string
 # - `commands`, a list of cmds you want to execute when
 #   logged into the host. use a basestring if it is a 
 #   regular command. and a 2-items list/tuple if it need
 #   to expect for the first item and then send the second
+# - `enable_jump`, if set to True, will use the defined jump_host, default to False
 #
 # [[127.0.0.1]]
 # username = "username"
@@ -70,6 +74,7 @@ CONFIG_TMPL = '''[jump_host]
 # port = 22
 # ssh_args = "-i your.pem"
 # commands = cd /data, ls
+# enable_jump = False
 '''
 
 class ConfigLoader(object):
@@ -131,10 +136,12 @@ class SSHhandler(object):
     port_default = 22
     dot = re.compile(r'[#$] ')
 
-    def __init__(self, host, username, password, port=22, ssh_args="", is_jump=False, short_name=''):
+    def __init__(self, host, username, password, port=22, ssh_args="", is_jump=False, short_name='', 
+                 enable_jump=False):
         self.host = host
         self.username = username
         self.password = password
+        self.enable_jump = enable_jump
         self.port = int_get(port, self.port_default)
         assert self.port > 0 and self.port < 65536, "port number must between 0 and 65535"
         self.is_jump = is_jump
@@ -159,7 +166,7 @@ class SSHhandler(object):
             # add signal when changing parent.size
             signal.signal(signal.SIGWINCH, self._set_term_size)
         else:
-            self.child.expect(self.dot)
+            #self.child.expect(self.dot)
             self.child.sendline(ssh_command)
         
         # several situations
@@ -210,15 +217,18 @@ class SSHhandler(object):
     def interact(self):
         # resize it first
         self._set_term_size(None, None)
+        print '\n'.join(self.child.before.split('\n')[:-1])
         self.child.interact()
 
     def _need_jump(self):
         """
         use `ping` to check if the host is available now
         """
+        if self.enable_jump:
+            return True
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(3)
+            sock.settimeout(TIME_WAIT)
             sock.connect((self.host, self.port))
             sock.close()
         except:
@@ -256,6 +266,7 @@ def autocomplete(key, hosts=[]):
                 result[1].append(ip)
     return result[3] or result[2] or result[1] or []
 
+
 if __name__ == "__main__":
     # This is the default config path
     config_path = os.path.join(os.environ["HOME"], ".sshhelper_config")
@@ -282,6 +293,7 @@ if __name__ == "__main__":
     values = config.hosts.get(host)
     # Set jump host
     SSHhandler.jump_host = config.jump_host
+    enable_jump = values.get("enable_jump", False)
 
     ssh = SSHhandler(
         host,
@@ -289,7 +301,8 @@ if __name__ == "__main__":
         values.get("password", ""),
         port = values.get("port"),
         ssh_args=values.get("ssh_args", ""),
-        short_name=values.get('short_name', '')
+        short_name=values.get('short_name', ''),
+        enable_jump=enable_jump
     )
 
     try:
@@ -308,3 +321,5 @@ if __name__ == "__main__":
         ssh.interact()
     except OSError, e:
         pass
+
+
