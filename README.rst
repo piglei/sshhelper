@@ -2,7 +2,7 @@
 sshhelper
 =========
 
-**NOTE: This project is legacy, please use custom ssh config file instead. see: [SSH ProxyCommand example: Going through one host to reach another server](https://www.cyberciti.biz/faq/linux-unix-ssh-proxycommand-passing-through-one-host-gateway-server/)**
+**NOTE:** This project is legacy, please use custom ssh config file instead. see: [SSH ProxyCommand example: Going through one host to reach another server](https://www.cyberciti.biz/faq/linux-unix-ssh-proxycommand-passing-through-one-host-gateway-server/)
 
 ---
 
